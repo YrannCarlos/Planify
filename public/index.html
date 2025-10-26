@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Planify — Calculadora de Planificação</title>
+
+  <style>
+    :root{
+      --bg:#232628; --panel:#1f2223; --accent:#e0482f; --accent-2:#ff7a3c;
+      --card:#2b2e2f; --muted:#9aa0a4; --light:#f5f6f7;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;font-family:'Roboto',Arial,sans-serif;background:var(--bg);color:var(--light)}
+    .app{display:flex;min-height:100vh}
+    .sidebar{width:260px;background:linear-gradient(180deg,var(--panel),#26292a);padding:26px;border-right:1px solid rgba(255,255,255,.03)}
+    .brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+    .logo{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent-2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;box-shadow:0 6px 12px rgba(224,72,47,.12),0 2px 4px rgba(0,0,0,.6)}
+    .brand h1{font-size:18px;letter-spacing:.6px}
+    .profile-list{margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .icon-btn{background:linear-gradient(180deg,#2f3334,#232626);border-radius:12px;padding:10px;display:flex;flex-direction:column;align-items:center;gap:6px;border:1px solid rgba(0,0,0,.6);box-shadow:0 6px 0 rgba(0,0,0,.35),0 2px 8px rgba(0,0,0,.5);transition:.14s;cursor:pointer;min-height:86px}
+    .icon-btn:hover{transform:translateY(-3px)}
+    .icon-btn.selected{transform:translateY(-8px) scale(1.05);box-shadow:0 18px 28px rgba(0,0,0,.6),0 6px 14px rgba(0,0,0,.45);border-color:rgba(255,120,80,.18);outline:2px solid rgba(224,72,47,.14)}
+    .icon-btn svg{width:64px;height:36px;fill:none;stroke:#bfc6c9;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;opacity:.95}
+    .icon-btn span{font-size:12px;color:var(--muted)}
+    .controls{margin-top:20px;color:var(--muted);font-size:13px}
+    .main{flex:1;padding:28px 36px;display:flex;flex-direction:column}
+    .top{display:flex;justify-content:space-between;align-items:center;gap:16px}
+    .title{font-size:20px}
+    .export-btn{background:var(--accent);border:none;color:#fff;padding:10px 14px;border-radius:8px;font-weight:600;box-shadow:0 6px 18px rgba(224,72,47,.18);cursor:pointer}
+    .layout{display:flex;gap:26px;margin-top:22px;align-items:flex-start}
+    .card{background:var(--card);padding:18px;border-radius:12px;box-shadow:0 6px 20px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.03)}
+    .form{width:420px}
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input[type="number"],select{width:100%;padding:10px 12px;border-radius:8px;border:none;background:#2d3031;color:var(--light);font-size:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.02);margin-bottom:10px}
+    .row{display:flex;gap:10px}.col{flex:1}
+    .btn-add{display:inline-flex;gap:8px;align-items:center;justify-content:center;padding:8px 10px;border-radius:8px;background:linear-gradient(180deg,#2d2f30,#232526);border:1px solid rgba(255,255,255,.03);color:var(--muted);cursor:pointer;margin-top:6px}
+    .preview{flex:1;border-radius:10px;background:linear-gradient(180deg,#1e2223,#222426);padding:18px;display:flex;flex-direction:column;gap:12px;border:1px solid rgba(255,255,255,.02)}
+    .preview-top{display:flex;justify-content:space-between;align-items:center}
+    .result-box{display:flex;gap:10px}
+    .result-card{flex:1;background:linear-gradient(180deg,#222426,#1d1f20);padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,.02)}
+    .result-card .label{font-size:12px;color:var(--muted)}
+    .result-card .value{font-size:18px;font-weight:700;margin-top:6px}
+    .preview-grid{display:grid;grid-template-columns:1.2fr .8fr;gap:10px}
+    .preview-canvas{min-height:320px;border-radius:8px;background:linear-gradient(180deg,#2a2d2e,#232526);display:flex;align-items:center;justify-content:center}
+    .calc-side{background:#2a2d2e;border-radius:8px;padding:10px}
+    .muted{color:var(--muted);font-size:12px}
+    .generate{margin-top:14px;width:100%;padding:12px;font-weight:700;background:linear-gradient(180deg,var(--accent),var(--accent-2));border:none;color:#fff;border-radius:10px;cursor:pointer;box-shadow:0 12px 24px rgba(224,72,47,.14)}
+    .added-bend{display:flex;gap:8px;align-items:center;margin-top:8px}
+
+    /* Modal DXF */
+    .dxf-modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;z-index:9999}
+    .dxf-modal{width:min(460px,92vw);background:#1f2223;color:#f5f6f7;border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.06);padding:18px}
+    .dxf-modal h3{margin:0 0 8px;font-size:18px}
+    .dxf-modal p{margin:0 0 14px;color:#9aa0a4;font-size:13px}
+    .dxf-row{display:flex;gap:10px}
+    .dxf-btn{flex:1;padding:12px;border-radius:10px;border:1px solid rgba(255,255,255,.06);background:linear-gradient(180deg,#2d2f30,#232526);color:#f5f6f7;cursor:pointer;font-weight:700}
+    .dxf-btn.primary{background:linear-gradient(180deg,var(--accent),var(--accent-2));border:none}
+    .dxf-close{margin-top:10px;width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:#2b2e2f;color:#9aa0a4;cursor:pointer;font-weight:600}
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">P<span style="color:#fff;opacity:.13;margin-left:2px">y</span></div>
+        <div>
+          <h1>Planify</h1>
+          <div class="muted">Planificação — Corte & Dobra</div>
+        </div>
+      </div>
+
+      <div class="controls">Selecione o perfil</div>
+      <div class="profile-list">
+        <button class="icon-btn selected" data-profile="u" id="btn-u" title="Viga U">
+          <svg viewBox="0 0 120 68"><path d="M14 16 L14 52 L106 52 L106 16"/></svg><span>Viga U</span>
+        </button>
+        <button class="icon-btn" data-profile="ur" id="btn-ur" title="Viga U Enrijecida">
+          <svg viewBox="0 0 120 68">
+            <path d="M20 16 L20 52 L100 52 L100 16" stroke="#bfc6c9" stroke-width="2" fill="none"/>
+            <path d="M20 16 L20 6 L32 6 L32 16 L40 16" stroke="#bfc6c9" stroke-width="2" fill="none"/>
+            <path d="M100 16 L100 6 L88 6 L88 16 L80 16" stroke="#bfc6c9" stroke-width="2" fill="none"/>
+          </svg><span>Viga U Enrijecida</span>
+        </button>
+        <button class="icon-btn" data-profile="cant" id="btn-cant" title="Cantoneira">
+          <svg viewBox="0 0 120 68"><path d="M16 16 L16 52 L96 52"/></svg><span>Cantoneira</span>
+        </button>
+        <button class="icon-btn" data-profile="uplus" id="btn-uplus" title="Viga U Reforçada">
+          <svg viewBox="0 0 140 68">
+            <path d="M28 16 L28 52 L112 52 L112 16" stroke="#bfc6c9" stroke-width="2" fill="none"/>
+            <path d="M28 16 L16 16 L16 26 L8 26" stroke="#bfc6c9" stroke-width="2" fill="none"/>
+            <path d="M112 16 L124 16 L124 26 L132 26" stroke="#bfc6c9" stroke-width="2" fill="none"/>
+          </svg><span>Viga U Reforçada</span>
+        </button>
+      </div>
+
+      <div class="controls" style="margin-top:16px;">Observações</div>
+      <div class="muted" style="font-size:13px;">
+        Opções <strong>Adicionar dobra</strong> disponíveis apenas para <em>Viga U Enrijecida</em> e <em>Viga U Reforçada</em>.
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="top">
+        <div>
+          <div class="title">Planify — Calculadora de Planificação</div>
+          <div class="muted">Digite as medidas e gere a planificação com compensação e fator K</div>
+        </div>
+        <div><button class="export-btn" id="exportDXF">Exportar DXF</button></div>
+      </div>
+
+      <div class="layout">
+        <!-- Formulário -->
+        <div class="card form">
+          <div class="row">
+            <div class="col"><label for="aba1">Aba 1 (mm)</label><input id="aba1" type="number" step="0.1" placeholder="Ex: 50" /></div>
+            <div class="col"><label for="aba1Right">Aba 2 (mm)</label><input id="aba1Right" type="number" step="0.1" placeholder="Ex: 50" /></div>
+          </div>
+          <label for="alma">Alma (mm)</label><input id="alma" type="number" step="0.1" placeholder="Ex: 100" />
+
+          <div class="row">
+            <div class="col"><label for="espessura">Espessura (mm)</label><input id="espessura" type="number" step="0.01" placeholder="Ex: 3.0" /></div>
+            <div class="col"><label for="comprimento">Comprimento (mm)</label><input id="comprimento" type="number" step="0.1" placeholder="Ex: 1000" /></div>
+          </div>
+
+          <div class="row">
+            <div class="col"><label for="raio">Raio de dobra (R) (mm)</label><input id="raio" type="number" step="0.1" placeholder="Ex: 2.0" /></div>
+            <div class="col"><label for="kFactor">Fator K</label><input id="kFactor" type="number" step="0.01" value="0.33" /></div>
+          </div>
+
+          <label for="angulo1">Ângulo de dobra (°) — padrão para as dobras base</label>
+          <input id="angulo1" type="number" step="0.1" value="90" />
+
+          <label for="compensacaoCorte">Compensação de corte (mm)</label>
+          <input id="compensacaoCorte" type="number" step="0.01" placeholder="Ex: 0.7" />
+
+          <div id="additionalBendsContainer"></div>
+
+          <div style="margin-top:8px;">
+            <button id="addBendBtn" class="btn-add" type="button" title="Adicionar dobra (apenas UR / U+)">➕ Adicionar dobra</button>
+            <button id="removeBendBtn" class="btn-add" type="button" style="margin-left:8px;background:#3a3a3a">— Remover dobra</button>
+          </div>
+
+          <div class="muted">Clique em "GERAR PRÉ-VISUALIZAÇÃO" para confirmar os valores — os resultados atualizam automaticamente enquanto você digita.</div>
+          <button class="generate" id="generateBtn">GERAR PRÉ-VISUALIZAÇÃO</button>
+        </div>
+
+        <!-- Preview & Resultados -->
+        <div class="preview">
+          <div class="preview-top">
+            <div class="preview-title">Preview & Resultados</div>
+            <div class="muted" id="selProfileLabel">Perfil: Viga U</div>
+          </div>
+
+          <div class="result-box" style="margin-top:6px;">
+            <div class="result-card"><div class="label">Peso estimado</div><div class="value" id="pesoVal">0,00 kg</div></div>
+            <div class="result-card"><div class="label">Planificação (Larg. × Comp.)</div><div class="value" id="planVal">0,00 mm × 0,00 mm</div></div>
+          </div>
+
+          <div class="preview-grid" style="margin-top:6px;">
+            <div class="preview-canvas">
+              <svg id="sectionSvg" viewBox="0 0 600 360" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;"></svg>
+            </div>
+            <div class="calc-side">
+              <strong>Detalhes do cálculo:</strong>
+              <div id="detailCalc" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- ======== JS ÚNICO (cálculo + preview + DXF) ======== -->
+  <script>
+  (()=>{"use strict";
+
+    // ----------------- Utils & DOM -----------------
+    const $ = id => document.getElementById(id);
+    const num = v => parseFloat(v)||0;
+
+    const selProfileLabel = $('selProfileLabel');
+    const additionalContainer=$('additionalBendsContainer');
+    const addBendBtn=$('addBendBtn');
+    const removeBendBtn=$('removeBendBtn');
+    const pesoVal=$('pesoVal'), planVal=$('planVal'), detailCalc=$('detailCalc');
+    const generateBtn=$('generateBtn'), exportBtn=$('exportDXF');
+    const sectionSvg=$('sectionSvg');
+
+    const profiles={
+      u:{name:'Viga U',baseFlatsCount:3,allowsExtraBends:false},
+      ur:{name:'Viga U Enrijecida',baseFlatsCount:3,allowsExtraBends:true},
+      cant:{name:'Cantoneira',baseFlatsCount:2,allowsExtraBends:false},
+      uplus:{name:'Viga U Reforçada',baseFlatsCount:3,allowsExtraBends:true}
+    };
+
+    let selectedProfile = document.querySelector('.icon-btn.selected')?.dataset.profile || 'u';
+    if(selProfileLabel) selProfileLabel.textContent='Perfil: '+profiles[selectedProfile].name;
+
+    // --------------- Botões de perfil ---------------
+    document.querySelectorAll('.icon-btn').forEach(btn=>{
+      btn.addEventListener('click',()=>{
+        document.querySelectorAll('.icon-btn').forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedProfile = btn.dataset.profile||'u';
+        selProfileLabel.textContent='Perfil: '+profiles[selectedProfile].name;
+
+        if (profiles[selectedProfile].allowsExtraBends){
+          additionalContainer.style.display='block';
+          ensureExtraFieldsExist();
+        }else{
+          additionalContainer.style.display='none';
+          additionalContainer.innerHTML='';
+        }
+        computeAndRender();
+      });
+    });
+
+    // --------------- Extras (aba2/angulo2, aba3/angulo3) ---------------
+    function ensureExtraFieldsExist(){
+      for(let n=2;n<=3;n++){
+        if(!$('aba'+n)){
+          const wrap=document.createElement('div');
+          wrap.className='added-bend';
+          wrap.id='added-bend-'+(n-1);
+          wrap.innerHTML=`
+            <div style="flex:1">
+              <label for="aba${n}">Aba ${n} (mm)</label>
+              <input id="aba${n}" type="number" step="0.1" placeholder="Ex: 8" />
+            </div>
+            <div style="width:120px">
+              <label for="angulo${n}">Ângulo ${n} (°)</label>
+              <input id="angulo${n}" type="number" step="0.1" value="90" />
+            </div>`;
+          additionalContainer.appendChild(wrap);
+        }
+      }
+      ['aba2','angulo2','aba3','angulo3'].forEach(id=>$(id)?.addEventListener('input',computeAndRender));
+    }
+    addBendBtn?.addEventListener('click',()=>{ if(profiles[selectedProfile].allowsExtraBends) ensureExtraFieldsExist(); });
+    removeBendBtn?.addEventListener('click',()=>{ ( $('added-bend-2') || $('added-bend-1') )?.remove(); computeAndRender(); });
+
+    // --------------- Sincronizar Aba 1 → Aba 2 ---------------
+    $('aba1')?.addEventListener('input', ()=>{
+      const aba1Right = $('aba1Right');
+      if(aba1Right) {
+        aba1Right.value = $('aba1').value;
+      }
+    });
+
+    // --------------- Inputs que recalculam ---------------
+    ;['aba1','aba1Right','alma','espessura','comprimento','raio','kFactor','angulo1','compensacaoCorte','aba2','angulo2','aba3','angulo3']
+      .forEach(id=>$(id)?.addEventListener('input', computeAndRender));
+    generateBtn?.addEventListener('click',e=>{e.preventDefault();computeAndRender();});
+
+    // --------------- SVG helpers ---------------
+    function svgClear(svg){while(svg.firstChild) svg.removeChild(svg.firstChild);}
+    function svgAdd(svg,el){svg.appendChild(el);return el;}
+    function svgLine(parent,x1,y1,x2,y2,cls){const e=document.createElementNS('http://www.w3.org/2000/svg','line');e.setAttribute('x1',x1);e.setAttribute('y1',y1);e.setAttribute('x2',x2);e.setAttribute('y2',y2);if(cls)e.setAttribute('class',cls);return svgAdd(parent,e);}
+    function svgPath(parent,d,cls){const e=document.createElementNS('http://www.w3.org/2000/svg','path');e.setAttribute('d',d);if(cls)e.setAttribute('class',cls);return svgAdd(parent,e);}
+    function svgText(parent,x,y,str,cls){const e=document.createElementNS('http://www.w3.org/2000/svg','text');e.setAttribute('x',x);e.setAttribute('y',y);if(cls)e.setAttribute('class',cls);e.textContent=str;return svgAdd(parent,e);}
+    function svgGroup(parent,cls){const e=document.createElementNS('http://www.w3.org/2000/svg','g');if(cls)e.setAttribute('class',cls);return svgAdd(parent,e);}
+
+    // injeta ESTILO **após** o DOM estar pronto (conserta “tudo laranja”/sem linhas)
+    function injectSvgStyle(){
+      const svg = $('sectionSvg');
+      if(!svg) return;
+      const style = document.createElementNS('http://www.w3.org/2000/svg','style');
+      style.textContent = `
+        .sketch{ stroke:#00e5ff; stroke-width:2.2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+        .dim{ stroke:#ff5b5b; stroke-width:1.6; fill:none; stroke-dasharray:4 4; }
+        .dim-text{ fill:#ff5b5b; font-size:14px; font-weight:600; font-family:Arial, sans-serif; }
+        .guide{ stroke:#666b6f; stroke-width:1.2; stroke-dasharray:6 6; }
+      `;
+      svg.appendChild(style);
+    }
+    window.addEventListener('DOMContentLoaded', injectSvgStyle);
+
+    // setas de cota
+    function svgArrow(svg,x1,y1,x2,y2,cls){
+      svgLine(svg,x1,y1,x2,y2,cls);
+      const ang=Math.atan2(y2-y1,x2-x1), sz=6, ax=x2-Math.cos(ang)*sz, ay=y2-Math.sin(ang)*sz;
+      const L=`L ${ax+Math.cos(ang+Math.PI/2)*sz} ${ay+Math.sin(ang+Math.PI/2)*sz}`;
+      const R=`L ${ax+Math.cos(ang-Math.PI/2)*sz} ${ay+Math.sin(ang-Math.PI/2)*sz}`;
+      svgPath(svg,`M ${x2} ${y2} ${L} M ${x2} ${y2} ${R}`,cls);
+    }
+    function dimH(svg,x1,x2,y,label){svgArrow(svg,x1,y,x2,y,'dim');svgLine(svg,x1,y-8,x1,y+8,'dim');svgLine(svg,x2,y-8,x2,y+8,'dim');svgText(svg,(x1+x2)/2,y-6,label,'dim-text');}
+    function dimV(svg,x,y1,y2,label){svgArrow(svg,x,y1,x,y2,'dim');svgLine(svg,x-8,y1,x+8,y1,'dim');svgLine(svg,x-8,y2,x+8,y2,'dim');svgText(svg,x+10,(y1+y2)/2,label,'dim-text');}
+
+    // --------------- Desenho do esboço ---------------
+    function drawSectionPreview({profile,abaL,alma,angL,abaR,angR}){
+      const svg = sectionSvg; if(!svg) return;
+      svgClear(svg);
+      const VBW=600, VBH=360; svg.setAttribute('viewBox',`0 0 ${VBW} ${VBH}`);
+
+      const padX=40, padY=30, boxW=VBW-padX*2, boxH=VBH-padY*2;
+      const totalW = (profile==='cant') ? alma : (abaL + alma + abaR);
+      const maxH = Math.max(abaL, (profile==='cant'?0:abaR), 1);
+      const s = Math.min(boxW/Math.max(totalW,1), boxH/Math.max(maxH,1)) * 0.9;
+
+      const offsetX = (VBW - totalW*s)/2;
+      const baselineY = VBH/2;
+
+      const x0=offsetX, x1=x0 + (abaL*s), x2=x1 + (alma*s), x3 = (profile==='cant') ? (x1+alma*s) : (x2 + (abaR*s));
+
+      svgLine(svg, x0, baselineY, x3, baselineY, 'guide'); // guia
+      const g = svgGroup(svg,'sketch');
+
+      // ALMA
+      if(profile==='cant') svgLine(g, x1, baselineY, x1+alma*s, baselineY, 'sketch');
+      else                 svgLine(g, x1, baselineY, x2,        baselineY, 'sketch');
+
+      const endPoint=(x,y,len,angDeg)=>{const a=(90-angDeg)*Math.PI/180;return {x:x+Math.cos(a)*len,y:y-Math.sin(a)*len};};
+
+      // Aba esquerda
+      if(abaL>0){ const p=endPoint(x1,baselineY,abaL*s,angL||90); svgLine(g,x1,baselineY,p.x,p.y,'sketch'); dimV(svg,x1-18,baselineY,p.y,`${abaL.toFixed(0)} mm`); }
+      // Aba direita
+      if(profile!=='cant' && abaR>0){ const p=endPoint(x2,baselineY,abaR*s,angR||90); svgLine(g,x2,baselineY,p.x,p.y,'sketch'); dimV(svg,x2+18,baselineY,p.y,`${abaR.toFixed(0)} mm`); }
+      // Cota da alma
+      if(profile==='cant') dimH(svg,x1,x1+alma*s,baselineY+28,`${alma.toFixed(0)} mm`);
+      else                 dimH(svg,x1,x2,       baselineY+28,`${alma.toFixed(0)} mm`);
+
+      svgText(svg, padX, padY+10, `Esboço do perfil (${profile.toUpperCase()}) — escala adaptativa`, 'dim-text');
+    }
+
+    // --------------- Cálculo + UI ---------------
+    function computeAndRender(){
+      const profile = selectedProfile;
+      const aba1=num($('aba1')?.value), aba1Right=num($('aba1Right')?.value)||aba1, alma=num($('alma')?.value), esp=num($('espessura')?.value),
+            comp=num($('comprimento')?.value), R=num($('raio')?.value), K=(num($('kFactor')?.value)||0.33),
+            cc=num($('compensacaoCorte')?.value), ang1=num($('angulo1')?.value)||90,
+            aba2=num($('aba2')?.value), ang2=num($('angulo2')?.value)||ang1, aba3=num($('aba3')?.value);
+
+      if(aba1<=0||alma<=0||esp<=0||comp<=0){
+        pesoVal.textContent='0,00 kg'; planVal.textContent='0,00 mm × 0,00 mm'; detailCalc.innerHTML=''; svgClear(sectionSvg); return;
+      }
+
+      let flats=(profile==='cant')?[aba1,alma]:[aba1,alma,aba1Right];
+      if(aba2>0) flats.push(aba2);
+      if(aba3>0) flats.push(aba3);
+
+      const baseBendsCount=profiles[profile].baseFlatsCount-1, totalBends=flats.length-1, angles=[];
+      for(let i=0;i<totalBends;i++){ if(i<baseBendsCount) angles.push(ang1); else {const idx=i-baseBendsCount+2; angles.push(num($('angulo'+idx)?.value)||ang1);} }
+
+      const sumFlats=flats.reduce((s,v)=>s+(parseFloat(v)||0),0);
+      const BA_list=angles.map(a=>(a*Math.PI/180)*(R+K*esp));
+      const BA_total=BA_list.reduce((s,v)=>s+v,0);
+      const desenvolvido=sumFlats+BA_total;
+      const planWidth=desenvolvido+2*cc, planLength=comp+2*cc;
+      const area=planWidth*planLength, pesoKg=area*esp*0.00000785;
+
+      pesoVal.textContent = `${isFinite(pesoKg)?pesoKg.toFixed(2):'0.00'} kg`;
+      planVal.textContent = `${isFinite(planWidth)?planWidth.toFixed(2):'0.00'} mm × ${isFinite(planLength)?planLength.toFixed(2):'0.00'} mm`;
+      detailCalc.innerHTML = `flats: ${flats.map(v=>parseFloat(v).toFixed(2)).join(' + ')} = ${sumFlats.toFixed(2)} mm<br/>BA_total: ${BA_total.toFixed(2)} mm (${angles.length} dobras)<br/>desenvolvido: ${desenvolvido.toFixed(2)} mm`;
+
+      // Preview (proporções reais, sem comprimento)
+      const abaL=aba1, abaR=(profile==='cant')?0:(aba2>0?aba2:aba1Right), angR=(profile==='cant')?0:(aba2>0?ang2:ang1);
+      drawSectionPreview({profile,abaL,alma,angL:ang1,abaR,angR});
+    }
+
+    // --------------- DXF (tamanho real) ---------------
+    function computePlanForDXF(){
+      const profile = selectedProfile;
+      const aba1=num($('aba1')?.value), aba1Right=num($('aba1Right')?.value)||aba1, alma=num($('alma')?.value), esp=num($('espessura')?.value),
+            comp=num($('comprimento')?.value), R=num($('raio')?.value), K=(num($('kFactor')?.value)||0.33),
+            cc=num($('compensacaoCorte')?.value), ang1=num($('angulo1')?.value)||90,
+            aba2=num($('aba2')?.value), ang2=num($('angulo2')?.value)||ang1, aba3=num($('aba3')?.value);
+
+      if(aba1<=0||alma<=0||esp<=0||comp<=0) return null;
+
+      let flats=(profile==='cant')?[aba1,alma]:[aba1,alma,aba1Right];
+      if(aba2>0) flats.push(aba2); if(aba3>0) flats.push(aba3);
+
+      const baseBendsCount=profiles[profile].baseFlatsCount-1, angles=[];
+      for(let i=0;i<flats.length-1;i++){ if(i<baseBendsCount) angles.push(ang1); else {const idx=i-baseBendsCount+2; angles.push(num($('angulo'+idx)?.value)||ang1);} }
+
+      const sumFlats=flats.reduce((s,v)=>s+(parseFloat(v)||0),0);
+      const BA_list=angles.map(a=>(a*Math.PI/180)*(R+K*esp));
+      const BA_total=BA_list.reduce((s,v)=>s+v,0);
+      const desenvolvido=sumFlats+BA_total;
+      const planWidth=desenvolvido+2*cc, planLength=comp+2*cc;
+
+      const bendCenters=[]; let cursor=cc;
+      for(let i=0;i<flats.length-1;i++){ cursor+=flats[i]; const mid=cursor+BA_list[i]/2; bendCenters.push(mid); cursor+=BA_list[i]; }
+      return {planWidth,planLength,bendCenters};
+    }
+    function dxfLine(L,layer,x1,y1,x2,y2){L.push('0','LINE','8',layer,'10',x1.toFixed(4),'20',y1.toFixed(4),'30','0.0','11',x2.toFixed(4),'21',y2.toFixed(4),'31','0.0');}
+    function buildDXF(plan,withBend){
+      const L=[]; L.push('0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC'); L.push('0','SECTION','2','ENTITIES');
+      const W=plan.planWidth,H=plan.planLength;
+      dxfLine(L,'CUT',0,0,W,0); dxfLine(L,'CUT',W,0,W,H); dxfLine(L,'CUT',W,H,0,H); dxfLine(L,'CUT',0,H,0,0);
+      if(withBend) for(const x of plan.bendCenters) dxfLine(L,'BEND',x,0,x,H);
+      L.push('0','ENDSEC','0','EOF'); return L.join('\r\n');
+    }
+    function downloadDXF(content,name){const blob=new Blob([content],{type:'application/dxf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name||'planificacao.dxf';document.body.appendChild(a);a.click();setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},200);}
+
+    function openDXFModal(){
+      const back=document.createElement('div'); back.className='dxf-modal-backdrop';
+      back.innerHTML=`<div class="dxf-modal"><h3>Escolha o tipo de exportação</h3><p>O arquivo será gerado em <strong>tamanho real (mm)</strong>, conforme a planificação (Larg × Comp.).</p><div class="dxf-row" style="margin-bottom:10px;"><button class="dxf-btn primary" id="dxfWith">Com linhas de dobra</button><button class="dxf-btn" id="dxfWithout">Sem linhas de dobra</button></div><button class="dxf-close" id="dxfClose">Cancelar</button></div>`;
+      document.body.appendChild(back);
+      function close(){back.remove();}
+      back.querySelector('#dxfWith').addEventListener('click',()=>{const plan=computePlanForDXF(); if(!plan){alert('Preencha as medidas válidas antes de exportar.');return;} downloadDXF(buildDXF(plan,true),'planificacao_bend.dxf'); close();});
+      back.querySelector('#dxfWithout').addEventListener('click',()=>{const plan=computePlanForDXF(); if(!plan){alert('Preencha as medidas válidas antes de exportar.');return;} downloadDXF(buildDXF(plan,false),'planificacao.dxf'); close();});
+      back.querySelector('#dxfClose').addEventListener('click',close);
+      back.addEventListener('click',e=>{if(e.target===back) close();});
+    }
+    exportBtn?.addEventListener('click',e=>{e.preventDefault();openDXFModal();});
+
+    // inicial
+    computeAndRender();
+
+  })();
+  </script>
+
+</body>
+</html>
