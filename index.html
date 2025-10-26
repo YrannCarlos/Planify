@@ -188,6 +188,14 @@
     const generateBtn=$('generateBtn'), exportBtn=$('exportDXF');
     const sectionSvg=$('sectionSvg');
 
+    const extraPairDefs=[
+      {leftId:'aba3',rightId:'aba4',angleId:'angulo2',leftLabel:'Aba 3 (mm)',rightLabel:'Aba 4 (mm)',angleLabel:'Ângulo 2 (°)'},
+      {leftId:'aba5',rightId:'aba6',angleId:'angulo3',leftLabel:'Aba 5 (mm)',rightLabel:'Aba 6 (mm)',angleLabel:'Ângulo 3 (°)'},
+      {leftId:'aba7',rightId:'aba8',angleId:'angulo4',leftLabel:'Aba 7 (mm)',rightLabel:'Aba 8 (mm)',angleLabel:'Ângulo 4 (°)'},
+      {leftId:'aba9',rightId:'aba10',angleId:'angulo5',leftLabel:'Aba 9 (mm)',rightLabel:'Aba 10 (mm)',angleLabel:'Ângulo 5 (°)'}
+    ];
+    const allPairDefs=[{leftId:'aba1',rightId:'aba1Right',angleId:'angulo1',base:true}].concat(extraPairDefs);
+
     const profiles={
       u:{name:'Viga U',baseFlatsCount:3,allowsExtraBends:false},
       ur:{name:'Viga U Enrijecida',baseFlatsCount:3,allowsExtraBends:true},
@@ -217,42 +225,107 @@
       });
     });
 
-    // --------------- Extras (aba2/angulo2, aba3/angulo3) ---------------
-    function ensureExtraFieldsExist(){
-      for(let n=2;n<=3;n++){
-        if(!$('aba'+n)){
-          const wrap=document.createElement('div');
-          wrap.className='added-bend';
-          wrap.id='added-bend-'+(n-1);
-          wrap.innerHTML=`
-            <div style="flex:1">
-              <label for="aba${n}">Aba ${n} (mm)</label>
-              <input id="aba${n}" type="number" step="0.1" placeholder="Ex: 8" />
-            </div>
-            <div style="width:120px">
-              <label for="angulo${n}">Ângulo ${n} (°)</label>
-              <input id="angulo${n}" type="number" step="0.1" value="90" />
-            </div>`;
-          additionalContainer.appendChild(wrap);
-        }
-      }
-      ['aba2','angulo2','aba3','angulo3'].forEach(id=>$(id)?.addEventListener('input',computeAndRender));
+    // --------------- Extras (pares adicionais) ---------------
+    function setupPairSync(leftId,rightId,{autoCompute=true}={}){
+      const leftEl=$(leftId), rightEl=$(rightId);
+      if(!leftEl||!rightEl) return;
+      leftEl.addEventListener('input',()=>{
+        rightEl.value=leftEl.value;
+        if(autoCompute) computeAndRender();
+      });
+      rightEl.addEventListener('input',computeAndRender);
     }
-    addBendBtn?.addEventListener('click',()=>{ if(profiles[selectedProfile].allowsExtraBends) ensureExtraFieldsExist(); });
-    removeBendBtn?.addEventListener('click',()=>{ ( $('added-bend-2') || $('added-bend-1') )?.remove(); computeAndRender(); });
+    setupPairSync('aba1','aba1Right',{autoCompute:false});
 
-    // --------------- Sincronizar Aba 1 → Aba 2 ---------------
-    $('aba1')?.addEventListener('input', ()=>{
-      const aba1Right = $('aba1Right');
-      if(aba1Right) {
-        aba1Right.value = $('aba1').value;
+    function ensureExtraFieldsExist(targetCount){
+      if(!additionalContainer) return;
+      const current=additionalContainer.querySelectorAll('.added-pair').length;
+      const desired=Math.min(targetCount ?? extraPairDefs.length, extraPairDefs.length);
+      for(let i=current;i<desired;i++){
+        const def=extraPairDefs[i];
+        const wrap=document.createElement('div');
+        wrap.className='added-bend added-pair';
+        wrap.dataset.pairIndex=String(i+2);
+        wrap.innerHTML=`
+          <div class="col" style="flex:1">
+            <label for="${def.leftId}">${def.leftLabel}</label>
+            <input id="${def.leftId}" type="number" step="0.1" placeholder="Ex: 8" />
+          </div>
+          <div class="col" style="flex:1">
+            <label for="${def.rightId}">${def.rightLabel}</label>
+            <input id="${def.rightId}" type="number" step="0.1" placeholder="Ex: 8" />
+          </div>
+          <div style="width:120px">
+            <label for="${def.angleId}">${def.angleLabel}</label>
+            <input id="${def.angleId}" type="number" step="0.1" value="90" />
+          </div>`;
+        additionalContainer.appendChild(wrap);
+        setupPairSync(def.leftId,def.rightId);
+        $(def.angleId)?.addEventListener('input',computeAndRender);
+      }
+    }
+    addBendBtn?.addEventListener('click',()=>{
+      if(!profiles[selectedProfile].allowsExtraBends) return;
+      const current=additionalContainer.querySelectorAll('.added-pair').length;
+      ensureExtraFieldsExist(current+1);
+    });
+    removeBendBtn?.addEventListener('click',()=>{
+      const last=additionalContainer.querySelector('.added-pair:last-of-type');
+      if(last){
+        last.remove();
+        computeAndRender();
       }
     });
 
     // --------------- Inputs que recalculam ---------------
-    ;['aba1','aba1Right','alma','espessura','comprimento','raio','kFactor','angulo1','compensacaoCorte','aba2','angulo2','aba3','angulo3']
+    ;['aba1','alma','espessura','comprimento','raio','kFactor','angulo1','compensacaoCorte']
       .forEach(id=>$(id)?.addEventListener('input', computeAndRender));
     generateBtn?.addEventListener('click',e=>{e.preventDefault();computeAndRender();});
+
+    function getActivePairs(profile){
+      const baseAngle=num($('angulo1')?.value)||90;
+      const pairs=[];
+      allPairDefs.forEach(def=>{
+        const leftEl=$(def.leftId);
+        const rightEl=$(def.rightId);
+        const angleEl=$(def.angleId);
+        const leftVal=num(leftEl?.value);
+        const rightRaw=num(rightEl?.value);
+        const rightVal=rightEl?(rightRaw>0?rightRaw:leftVal):leftVal;
+        const angleVal=(def.angleId==='angulo1')?(num(angleEl?.value)||90):(num(angleEl?.value)||baseAngle);
+        if(def.base){
+          if(leftVal>0) pairs.push({left:leftVal,right:rightVal,angle:angleVal});
+        }else if(leftEl&&rightEl&&leftVal>0){
+          pairs.push({left:leftVal,right:rightVal,angle:angleVal});
+        }
+      });
+      if(profile==='cant' && pairs.length>1) return [pairs[0]];
+      return pairs;
+    }
+
+    function buildFlatsAndAngles(profile, almaVal){
+      const fallbackLeft=num($('aba1')?.value);
+      const fallbackRight=num($('aba1Right')?.value)||fallbackLeft;
+      const fallbackAngle=num($('angulo1')?.value)||90;
+      const activePairs=getActivePairs(profile);
+      const pairsForCalc=activePairs.length?activePairs:(fallbackLeft>0?[{left:fallbackLeft,right:fallbackRight,angle:fallbackAngle}]:[]);
+      const basePair=pairsForCalc[0]||{left:fallbackLeft,right:fallbackRight,angle:fallbackAngle};
+
+      if(profile==='cant'){
+        const flats=(basePair.left>0&&almaVal>0)?[basePair.left,almaVal]:[];
+        const angles=flats.length? [basePair.angle]:[];
+        return {pairs:pairsForCalc,basePair,flats,angles};
+      }
+
+      const leftSegments=[], rightSegments=[];
+      for(let i=pairsForCalc.length-1;i>=0;i--) leftSegments.push(pairsForCalc[i].left);
+      for(let i=0;i<pairsForCalc.length;i++) rightSegments.push(pairsForCalc[i].right);
+      const flats=[...leftSegments, almaVal, ...rightSegments];
+      const angles=[];
+      pairsForCalc.slice().reverse().forEach(pair=>angles.push(pair.angle));
+      pairsForCalc.forEach(pair=>angles.push(pair.angle));
+      return {pairs:pairsForCalc,basePair,flats,angles};
+    }
 
     // --------------- SVG helpers ---------------
     function svgClear(svg){while(svg.firstChild) svg.removeChild(svg.firstChild);}
@@ -327,21 +400,14 @@
     // --------------- Cálculo + UI ---------------
     function computeAndRender(){
       const profile = selectedProfile;
-      const aba1=num($('aba1')?.value), aba1Right=num($('aba1Right')?.value)||aba1, alma=num($('alma')?.value), esp=num($('espessura')?.value),
-            comp=num($('comprimento')?.value), R=num($('raio')?.value), K=(num($('kFactor')?.value)||0.33),
-            cc=num($('compensacaoCorte')?.value), ang1=num($('angulo1')?.value)||90,
-            aba2=num($('aba2')?.value), ang2=num($('angulo2')?.value)||ang1, aba3=num($('aba3')?.value);
+      const alma=num($('alma')?.value), esp=num($('espessura')?.value), comp=num($('comprimento')?.value),
+            R=num($('raio')?.value), K=(num($('kFactor')?.value)||0.33), cc=num($('compensacaoCorte')?.value);
 
-      if(aba1<=0||alma<=0||esp<=0||comp<=0){
+      const {basePair,flats,angles}=buildFlatsAndAngles(profile, alma);
+
+      if(basePair.left<=0||alma<=0||esp<=0||comp<=0){
         pesoVal.textContent='0,00 kg'; planVal.textContent='0,00 mm × 0,00 mm'; detailCalc.innerHTML=''; svgClear(sectionSvg); return;
       }
-
-      let flats=(profile==='cant')?[aba1,alma]:[aba1,alma,aba1Right];
-      if(aba2>0) flats.push(aba2);
-      if(aba3>0) flats.push(aba3);
-
-      const baseBendsCount=profiles[profile].baseFlatsCount-1, totalBends=flats.length-1, angles=[];
-      for(let i=0;i<totalBends;i++){ if(i<baseBendsCount) angles.push(ang1); else {const idx=i-baseBendsCount+2; angles.push(num($('angulo'+idx)?.value)||ang1);} }
 
       const sumFlats=flats.reduce((s,v)=>s+(parseFloat(v)||0),0);
       const BA_list=angles.map(a=>(a*Math.PI/180)*(R+K*esp));
@@ -355,25 +421,23 @@
       detailCalc.innerHTML = `flats: ${flats.map(v=>parseFloat(v).toFixed(2)).join(' + ')} = ${sumFlats.toFixed(2)} mm<br/>BA_total: ${BA_total.toFixed(2)} mm (${angles.length} dobras)<br/>desenvolvido: ${desenvolvido.toFixed(2)} mm`;
 
       // Preview (proporções reais, sem comprimento)
-      const abaL=aba1, abaR=(profile==='cant')?0:(aba2>0?aba2:aba1Right), angR=(profile==='cant')?0:(aba2>0?ang2:ang1);
-      drawSectionPreview({profile,abaL,alma,angL:ang1,abaR,angR});
+      const abaL=basePair.left;
+      const abaR=(profile==='cant')?0:(basePair.right||0);
+      const angBase=basePair.angle|| (num($('angulo1')?.value)||90);
+      const angR=(profile==='cant')?0:angBase;
+      drawSectionPreview({profile,abaL,alma,angL:angBase,abaR,angR});
     }
 
     // --------------- DXF (tamanho real) ---------------
     function computePlanForDXF(){
       const profile = selectedProfile;
-      const aba1=num($('aba1')?.value), aba1Right=num($('aba1Right')?.value)||aba1, alma=num($('alma')?.value), esp=num($('espessura')?.value),
+      const alma=num($('alma')?.value), esp=num($('espessura')?.value),
             comp=num($('comprimento')?.value), R=num($('raio')?.value), K=(num($('kFactor')?.value)||0.33),
-            cc=num($('compensacaoCorte')?.value), ang1=num($('angulo1')?.value)||90,
-            aba2=num($('aba2')?.value), ang2=num($('angulo2')?.value)||ang1, aba3=num($('aba3')?.value);
+            cc=num($('compensacaoCorte')?.value);
 
-      if(aba1<=0||alma<=0||esp<=0||comp<=0) return null;
+      const {basePair,flats,angles}=buildFlatsAndAngles(profile, alma);
 
-      let flats=(profile==='cant')?[aba1,alma]:[aba1,alma,aba1Right];
-      if(aba2>0) flats.push(aba2); if(aba3>0) flats.push(aba3);
-
-      const baseBendsCount=profiles[profile].baseFlatsCount-1, angles=[];
-      for(let i=0;i<flats.length-1;i++){ if(i<baseBendsCount) angles.push(ang1); else {const idx=i-baseBendsCount+2; angles.push(num($('angulo'+idx)?.value)||ang1);} }
+      if(basePair.left<=0||alma<=0||esp<=0||comp<=0||!flats.length) return null;
 
       const sumFlats=flats.reduce((s,v)=>s+(parseFloat(v)||0),0);
       const BA_list=angles.map(a=>(a*Math.PI/180)*(R+K*esp));
@@ -382,7 +446,13 @@
       const planWidth=desenvolvido+2*cc, planLength=comp+2*cc;
 
       const bendCenters=[]; let cursor=cc;
-      for(let i=0;i<flats.length-1;i++){ cursor+=flats[i]; const mid=cursor+BA_list[i]/2; bendCenters.push(mid); cursor+=BA_list[i]; }
+      for(let i=0;i<flats.length-1;i++){
+        cursor+=flats[i];
+        const ba=BA_list[i]||0;
+        const mid=cursor+ba/2;
+        bendCenters.push(mid);
+        cursor+=ba;
+      }
       return {planWidth,planLength,bendCenters};
     }
     function dxfLine(L,layer,x1,y1,x2,y2){L.push('0','LINE','8',layer,'10',x1.toFixed(4),'20',y1.toFixed(4),'30','0.0','11',x2.toFixed(4),'21',y2.toFixed(4),'31','0.0');}
