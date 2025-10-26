@@ -1,0 +1,380 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/public/index.html b/public/index.html
+index b82dd86dd90f2af4f8431a10260fcad53aa8aa5e..5c11a5d46d55965e7dd1d4e1bc8e163d73c740c1 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -158,151 +158,186 @@
+             <div class="result-card"><div class="label">Planificação (Larg. × Comp.)</div><div class="value" id="planVal">0,00 mm × 0,00 mm</div></div>
+           </div>
+
+           <div class="preview-grid" style="margin-top:6px;">
+             <div class="preview-canvas">
+               <svg id="sectionSvg" viewBox="0 0 600 360" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%;display:block;"></svg>
+             </div>
+             <div class="calc-side">
+               <strong>Detalhes do cálculo:</strong>
+               <div id="detailCalc" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+             </div>
+           </div>
+         </div>
+       </div>
+     </main>
+   </div>
+
+   <!-- ======== JS ÚNICO (cálculo + preview + DXF) ======== -->
+   <script>
+   (()=>{"use strict";
+
+     // ----------------- Utils & DOM -----------------
+     const $ = id => document.getElementById(id);
+     const num = v => parseFloat(v)||0;
+
+-    const selProfileLabel = $('selProfileLabel');
+-    const additionalContainer=$('additionalBendsContainer');
+-    const addBendBtn=$('addBendBtn');
+-    const removeBendBtn=$('removeBendBtn');
+-    const pesoVal=$('pesoVal'), planVal=$('planVal'), detailCalc=$('detailCalc');
+-    const generateBtn=$('generateBtn'), exportBtn=$('exportDXF');
+-    const sectionSvg=$('sectionSvg');
++    let selProfileLabel;
++    let additionalContainer;
++    let addBendBtn;
++    let removeBendBtn;
++    let pesoVal;
++    let planVal;
++    let detailCalc;
++    let generateBtn;
++    let exportBtn;
++    let sectionSvg;
+
+     const extraPairDefs=[
+       {leftId:'aba3',rightId:'aba4',angleId:'angulo2',leftLabel:'Aba 3 (mm)',rightLabel:'Aba 4 (mm)',angleLabel:'Ângulo 2 (°)'},
+       {leftId:'aba5',rightId:'aba6',angleId:'angulo3',leftLabel:'Aba 5 (mm)',rightLabel:'Aba 6 (mm)',angleLabel:'Ângulo 3 (°)'},
+       {leftId:'aba7',rightId:'aba8',angleId:'angulo4',leftLabel:'Aba 7 (mm)',rightLabel:'Aba 8 (mm)',angleLabel:'Ângulo 4 (°)'},
+       {leftId:'aba9',rightId:'aba10',angleId:'angulo5',leftLabel:'Aba 9 (mm)',rightLabel:'Aba 10 (mm)',angleLabel:'Ângulo 5 (°)'}
+     ];
+     const allPairDefs=[{leftId:'aba1',rightId:'aba1Right',angleId:'angulo1',base:true}].concat(extraPairDefs);
+
+     const profiles={
+       u:{name:'Viga U',baseFlatsCount:3,allowsExtraBends:false},
+       ur:{name:'Viga U Enrijecida',baseFlatsCount:3,allowsExtraBends:true},
+       cant:{name:'Cantoneira',baseFlatsCount:2,allowsExtraBends:false},
+       uplus:{name:'Viga U Reforçada',baseFlatsCount:3,allowsExtraBends:true}
+     };
+
+-    let selectedProfile = document.querySelector('.icon-btn.selected')?.dataset.profile || 'u';
+-    if(selProfileLabel) selProfileLabel.textContent='Perfil: '+profiles[selectedProfile].name;
+-
+-    // --------------- Botões de perfil ---------------
+-    document.querySelectorAll('.icon-btn').forEach(btn=>{
+-      btn.addEventListener('click',()=>{
+-        document.querySelectorAll('.icon-btn').forEach(b=>b.classList.remove('selected'));
+-        btn.classList.add('selected');
+-        selectedProfile = btn.dataset.profile||'u';
+-        selProfileLabel.textContent='Perfil: '+profiles[selectedProfile].name;
+-
+-        if (profiles[selectedProfile].allowsExtraBends){
+-          additionalContainer.style.display='block';
+-          ensureExtraFieldsExist();
+-        }else{
+-          additionalContainer.style.display='none';
+-          additionalContainer.innerHTML='';
+-        }
+-        computeAndRender();
+-      });
+-    });
+-
++    let selectedProfile='u';
++    let previewEnabled=false;
+     // --------------- Extras (pares adicionais) ---------------
+     function setupPairSync(leftId,rightId,{autoCompute=true}={}){
+       const leftEl=$(leftId), rightEl=$(rightId);
+       if(!leftEl||!rightEl) return;
+       leftEl.addEventListener('input',()=>{
+         rightEl.value=leftEl.value;
+         if(autoCompute) computeAndRender();
+       });
+       rightEl.addEventListener('input',computeAndRender);
+     }
+-    setupPairSync('aba1','aba1Right',{autoCompute:false});
+
+     function ensureExtraFieldsExist(targetCount){
+       if(!additionalContainer) return;
+       const current=additionalContainer.querySelectorAll('.added-pair').length;
+       const desired=Math.min(targetCount ?? extraPairDefs.length, extraPairDefs.length);
+       for(let i=current;i<desired;i++){
+         const def=extraPairDefs[i];
+         const wrap=document.createElement('div');
+         wrap.className='added-bend added-pair';
+         wrap.dataset.pairIndex=String(i+2);
+         wrap.innerHTML=`
+           <div class="col" style="flex:1">
+             <label for="${def.leftId}">${def.leftLabel}</label>
+             <input id="${def.leftId}" type="number" step="0.1" placeholder="Ex: 8" />
+           </div>
+           <div class="col" style="flex:1">
+             <label for="${def.rightId}">${def.rightLabel}</label>
+             <input id="${def.rightId}" type="number" step="0.1" placeholder="Ex: 8" />
+           </div>
+           <div style="width:120px">
+             <label for="${def.angleId}">${def.angleLabel}</label>
+             <input id="${def.angleId}" type="number" step="0.1" value="90" />
+           </div>`;
+         additionalContainer.appendChild(wrap);
+         setupPairSync(def.leftId,def.rightId);
+         $(def.angleId)?.addEventListener('input',computeAndRender);
+       }
+     }
+-    addBendBtn?.addEventListener('click',()=>{
+-      if(!profiles[selectedProfile].allowsExtraBends) return;
+-      const current=additionalContainer.querySelectorAll('.added-pair').length;
+-      ensureExtraFieldsExist(current+1);
+-    });
+-    removeBendBtn?.addEventListener('click',()=>{
+-      const last=additionalContainer.querySelector('.added-pair:last-of-type');
+-      if(last){
+-        last.remove();
+-        computeAndRender();
++    function ensurePairsForProfile(){
++      if(!additionalContainer) return;
++      if(profiles[selectedProfile]?.allowsExtraBends){
++        additionalContainer.style.display='block';
++        const current=additionalContainer.querySelectorAll('.added-pair').length;
++        if(current===0) ensureExtraFieldsExist(1);
++      }else{
++        additionalContainer.style.display='none';
++        additionalContainer.innerHTML='';
+       }
+-    });
++    }
+
+-    // --------------- Inputs que recalculam ---------------
+-    ;['aba1','alma','espessura','comprimento','raio','kFactor','angulo1','compensacaoCorte']
+-      .forEach(id=>$(id)?.addEventListener('input', computeAndRender));
+-    generateBtn?.addEventListener('click',e=>{e.preventDefault();computeAndRender();});
++    function init(){
++      selProfileLabel = $('selProfileLabel');
++      additionalContainer=$('additionalBendsContainer');
++      addBendBtn=$('addBendBtn');
++      removeBendBtn=$('removeBendBtn');
++      pesoVal=$('pesoVal');
++      planVal=$('planVal');
++      detailCalc=$('detailCalc');
++      generateBtn=$('generateBtn');
++      exportBtn=$('exportDXF');
++      sectionSvg=$('sectionSvg');
++
++      selectedProfile = document.querySelector('.icon-btn.selected')?.dataset.profile || 'u';
++      if(selProfileLabel) selProfileLabel.textContent='Perfil: '+profiles[selectedProfile].name;
++
++      ensurePairsForProfile();
++      setupPairSync('aba1','aba1Right',{autoCompute:false});
++
++      document.querySelectorAll('.icon-btn').forEach(btn=>{
++        btn.addEventListener('click',()=>{
++          document.querySelectorAll('.icon-btn').forEach(b=>b.classList.remove('selected'));
++          btn.classList.add('selected');
++          selectedProfile = btn.dataset.profile||'u';
++          if(selProfileLabel) selProfileLabel.textContent='Perfil: '+profiles[selectedProfile].name;
++
++          ensurePairsForProfile();
++          computeAndRender();
++        });
++      });
++
++      addBendBtn?.addEventListener('click',()=>{
++        if(!profiles[selectedProfile].allowsExtraBends) return;
++        const current=additionalContainer.querySelectorAll('.added-pair').length;
++        ensureExtraFieldsExist(current+1);
++      });
++      removeBendBtn?.addEventListener('click',()=>{
++        const last=additionalContainer.querySelector('.added-pair:last-of-type');
++        if(last){
++          last.remove();
++          computeAndRender();
++        }
++      });
++
++      ;['aba1','alma','espessura','comprimento','raio','kFactor','angulo1','compensacaoCorte']
++        .forEach(id=>$(id)?.addEventListener('input', computeAndRender));
++
++      generateBtn?.addEventListener('click',e=>{
++        e.preventDefault();
++        previewEnabled=true;
++        computeAndRender();
++      });
++
++      exportBtn?.addEventListener('click',e=>{e.preventDefault();openDXFModal();});
++
++      injectSvgStyle();
++    }
++
++    window.addEventListener('DOMContentLoaded', init);
+
+     function getActivePairs(profile){
+       const baseAngle=num($('angulo1')?.value)||90;
+       const pairs=[];
+       allPairDefs.forEach(def=>{
+         const leftEl=$(def.leftId);
+         const rightEl=$(def.rightId);
+         const angleEl=$(def.angleId);
+         const leftVal=num(leftEl?.value);
+         const rightRaw=num(rightEl?.value);
+         const rightVal=rightEl?(rightRaw>0?rightRaw:leftVal):leftVal;
+         const angleVal=(def.angleId==='angulo1')?(num(angleEl?.value)||90):(num(angleEl?.value)||baseAngle);
+         if(def.base){
+           if(leftVal>0) pairs.push({left:leftVal,right:rightVal,angle:angleVal});
+         }else if(leftEl&&rightEl&&leftVal>0){
+           pairs.push({left:leftVal,right:rightVal,angle:angleVal});
+         }
+       });
+       if(profile==='cant' && pairs.length>1) return [pairs[0]];
+       return pairs;
+     }
+
+     function buildFlatsAndAngles(profile, almaVal){
+       const fallbackLeft=num($('aba1')?.value);
+       const fallbackRight=num($('aba1Right')?.value)||fallbackLeft;
+@@ -326,101 +361,101 @@
+       pairsForCalc.forEach(pair=>angles.push(pair.angle));
+       return {pairs:pairsForCalc,basePair,flats,angles};
+     }
+
+     // --------------- SVG helpers ---------------
+     function svgClear(svg){while(svg.firstChild) svg.removeChild(svg.firstChild);}
+     function svgAdd(svg,el){svg.appendChild(el);return el;}
+     function svgLine(parent,x1,y1,x2,y2,cls){const e=document.createElementNS('http://www.w3.org/2000/svg','line');e.setAttribute('x1',x1);e.setAttribute('y1',y1);e.setAttribute('x2',x2);e.setAttribute('y2',y2);if(cls)e.setAttribute('class',cls);return svgAdd(parent,e);}
+     function svgPath(parent,d,cls){const e=document.createElementNS('http://www.w3.org/2000/svg','path');e.setAttribute('d',d);if(cls)e.setAttribute('class',cls);return svgAdd(parent,e);}
+     function svgText(parent,x,y,str,cls){const e=document.createElementNS('http://www.w3.org/2000/svg','text');e.setAttribute('x',x);e.setAttribute('y',y);if(cls)e.setAttribute('class',cls);e.textContent=str;return svgAdd(parent,e);}
+     function svgGroup(parent,cls){const e=document.createElementNS('http://www.w3.org/2000/svg','g');if(cls)e.setAttribute('class',cls);return svgAdd(parent,e);}
+
+     // injeta ESTILO **após** o DOM estar pronto (conserta “tudo laranja”/sem linhas)
+     function injectSvgStyle(){
+       const svg = $('sectionSvg');
+       if(!svg) return;
+       const style = document.createElementNS('http://www.w3.org/2000/svg','style');
+       style.textContent = `
+         .sketch{ stroke:#00e5ff; stroke-width:2.2; fill:none; stroke-linecap:round; stroke-linejoin:round; }
+         .dim{ stroke:#ff5b5b; stroke-width:1.6; fill:none; stroke-dasharray:4 4; }
+         .dim-text{ fill:#ff5b5b; font-size:14px; font-weight:600; font-family:Arial, sans-serif; }
+         .guide{ stroke:#666b6f; stroke-width:1.2; stroke-dasharray:6 6; }
+       `;
+       svg.appendChild(style);
+     }
+-    window.addEventListener('DOMContentLoaded', injectSvgStyle);
+-
+     // setas de cota
+     function svgArrow(svg,x1,y1,x2,y2,cls){
+       svgLine(svg,x1,y1,x2,y2,cls);
+       const ang=Math.atan2(y2-y1,x2-x1), sz=6, ax=x2-Math.cos(ang)*sz, ay=y2-Math.sin(ang)*sz;
+       const L=`L ${ax+Math.cos(ang+Math.PI/2)*sz} ${ay+Math.sin(ang+Math.PI/2)*sz}`;
+       const R=`L ${ax+Math.cos(ang-Math.PI/2)*sz} ${ay+Math.sin(ang-Math.PI/2)*sz}`;
+       svgPath(svg,`M ${x2} ${y2} ${L} M ${x2} ${y2} ${R}`,cls);
+     }
+     function dimH(svg,x1,x2,y,label){svgArrow(svg,x1,y,x2,y,'dim');svgLine(svg,x1,y-8,x1,y+8,'dim');svgLine(svg,x2,y-8,x2,y+8,'dim');svgText(svg,(x1+x2)/2,y-6,label,'dim-text');}
+     function dimV(svg,x,y1,y2,label){svgArrow(svg,x,y1,x,y2,'dim');svgLine(svg,x-8,y1,x+8,y1,'dim');svgLine(svg,x-8,y2,x+8,y2,'dim');svgText(svg,x+10,(y1+y2)/2,label,'dim-text');}
+
+     // --------------- Desenho do esboço ---------------
+     function drawSectionPreview({profile,abaL,alma,angL,abaR,angR}){
+       const svg = sectionSvg; if(!svg) return;
+       svgClear(svg);
+       const VBW=600, VBH=360; svg.setAttribute('viewBox',`0 0 ${VBW} ${VBH}`);
+
+       const padX=40, padY=30, boxW=VBW-padX*2, boxH=VBH-padY*2;
+       const totalW = (profile==='cant') ? alma : (abaL + alma + abaR);
+       const maxH = Math.max(abaL, (profile==='cant'?0:abaR), 1);
+       const s = Math.min(boxW/Math.max(totalW,1), boxH/Math.max(maxH,1)) * 0.9;
+
+       const offsetX = (VBW - totalW*s)/2;
+       const baselineY = VBH/2;
+
+       const x0=offsetX, x1=x0 + (abaL*s), x2=x1 + (alma*s), x3 = (profile==='cant') ? (x1+alma*s) : (x2 + (abaR*s));
+
+       svgLine(svg, x0, baselineY, x3, baselineY, 'guide'); // guia
+       const g = svgGroup(svg,'sketch');
+
+       // ALMA
+       if(profile==='cant') svgLine(g, x1, baselineY, x1+alma*s, baselineY, 'sketch');
+       else                 svgLine(g, x1, baselineY, x2,        baselineY, 'sketch');
+
+       const endPoint=(x,y,len,angDeg)=>{const a=(90-angDeg)*Math.PI/180;return {x:x+Math.cos(a)*len,y:y-Math.sin(a)*len};};
+
+       // Aba esquerda
+       if(abaL>0){ const p=endPoint(x1,baselineY,abaL*s,angL||90); svgLine(g,x1,baselineY,p.x,p.y,'sketch'); dimV(svg,x1-18,baselineY,p.y,`${abaL.toFixed(0)} mm`); }
+       // Aba direita
+       if(profile!=='cant' && abaR>0){ const p=endPoint(x2,baselineY,abaR*s,angR||90); svgLine(g,x2,baselineY,p.x,p.y,'sketch'); dimV(svg,x2+18,baselineY,p.y,`${abaR.toFixed(0)} mm`); }
+       // Cota da alma
+       if(profile==='cant') dimH(svg,x1,x1+alma*s,baselineY+28,`${alma.toFixed(0)} mm`);
+       else                 dimH(svg,x1,x2,       baselineY+28,`${alma.toFixed(0)} mm`);
+
+       svgText(svg, padX, padY+10, `Esboço do perfil (${profile.toUpperCase()}) — escala adaptativa`, 'dim-text');
+     }
+
+     // --------------- Cálculo + UI ---------------
+     function computeAndRender(){
++      if(!previewEnabled) return;
++      if(!pesoVal||!planVal||!detailCalc||!sectionSvg) return;
+       const profile = selectedProfile;
+       const alma=num($('alma')?.value), esp=num($('espessura')?.value), comp=num($('comprimento')?.value),
+             R=num($('raio')?.value), K=(num($('kFactor')?.value)||0.33), cc=num($('compensacaoCorte')?.value);
+
+       const {basePair,flats,angles}=buildFlatsAndAngles(profile, alma);
+
+       if(basePair.left<=0||alma<=0||esp<=0||comp<=0){
+         pesoVal.textContent='0,00 kg'; planVal.textContent='0,00 mm × 0,00 mm'; detailCalc.innerHTML=''; svgClear(sectionSvg); return;
+       }
+
+       const sumFlats=flats.reduce((s,v)=>s+(parseFloat(v)||0),0);
+       const BA_list=angles.map(a=>(a*Math.PI/180)*(R+K*esp));
+       const BA_total=BA_list.reduce((s,v)=>s+v,0);
+       const desenvolvido=sumFlats+BA_total;
+       const planWidth=desenvolvido+2*cc, planLength=comp+2*cc;
+       const area=planWidth*planLength, pesoKg=area*esp*0.00000785;
+
+       pesoVal.textContent = `${isFinite(pesoKg)?pesoKg.toFixed(2):'0.00'} kg`;
+       planVal.textContent = `${isFinite(planWidth)?planWidth.toFixed(2):'0.00'} mm × ${isFinite(planLength)?planLength.toFixed(2):'0.00'} mm`;
+       detailCalc.innerHTML = `flats: ${flats.map(v=>parseFloat(v).toFixed(2)).join(' + ')} = ${sumFlats.toFixed(2)} mm<br/>BA_total: ${BA_total.toFixed(2)} mm (${angles.length} dobras)<br/>desenvolvido: ${desenvolvido.toFixed(2)} mm`;
+
+       // Preview (proporções reais, sem comprimento)
+       const abaL=basePair.left;
+       const abaR=(profile==='cant')?0:(basePair.right||0);
+       const angBase=basePair.angle|| (num($('angulo1')?.value)||90);
+@@ -453,35 +488,33 @@
+         bendCenters.push(mid);
+         cursor+=ba;
+       }
+       return {planWidth,planLength,bendCenters};
+     }
+     function dxfLine(L,layer,x1,y1,x2,y2){L.push('0','LINE','8',layer,'10',x1.toFixed(4),'20',y1.toFixed(4),'30','0.0','11',x2.toFixed(4),'21',y2.toFixed(4),'31','0.0');}
+     function buildDXF(plan,withBend){
+       const L=[]; L.push('0','SECTION','2','HEADER','9','$ACADVER','1','AC1009','0','ENDSEC'); L.push('0','SECTION','2','ENTITIES');
+       const W=plan.planWidth,H=plan.planLength;
+       dxfLine(L,'CUT',0,0,W,0); dxfLine(L,'CUT',W,0,W,H); dxfLine(L,'CUT',W,H,0,H); dxfLine(L,'CUT',0,H,0,0);
+       if(withBend) for(const x of plan.bendCenters) dxfLine(L,'BEND',x,0,x,H);
+       L.push('0','ENDSEC','0','EOF'); return L.join('\r\n');
+     }
+     function downloadDXF(content,name){const blob=new Blob([content],{type:'application/dxf'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name||'planificacao.dxf';document.body.appendChild(a);a.click();setTimeout(()=>{document.body.removeChild(a);URL.revokeObjectURL(url);},200);}
+
+     function openDXFModal(){
+       const back=document.createElement('div'); back.className='dxf-modal-backdrop';
+       back.innerHTML=`<div class="dxf-modal"><h3>Escolha o tipo de exportação</h3><p>O arquivo será gerado em <strong>tamanho real (mm)</strong>, conforme a planificação (Larg × Comp.).</p><div class="dxf-row" style="margin-bottom:10px;"><button class="dxf-btn primary" id="dxfWith">Com linhas de dobra</button><button class="dxf-btn" id="dxfWithout">Sem linhas de dobra</button></div><button class="dxf-close" id="dxfClose">Cancelar</button></div>`;
+       document.body.appendChild(back);
+       function close(){back.remove();}
+       back.querySelector('#dxfWith').addEventListener('click',()=>{const plan=computePlanForDXF(); if(!plan){alert('Preencha as medidas válidas antes de exportar.');return;} downloadDXF(buildDXF(plan,true),'planificacao_bend.dxf'); close();});
+       back.querySelector('#dxfWithout').addEventListener('click',()=>{const plan=computePlanForDXF(); if(!plan){alert('Preencha as medidas válidas antes de exportar.');return;} downloadDXF(buildDXF(plan,false),'planificacao.dxf'); close();});
+       back.querySelector('#dxfClose').addEventListener('click',close);
+       back.addEventListener('click',e=>{if(e.target===back) close();});
+     }
+-    exportBtn?.addEventListener('click',e=>{e.preventDefault();openDXFModal();});
+-
+     // inicial
+     computeAndRender();
+
+   })();
+   </script>
+
+ </body>
+ </html>
+
+EOF
+)
