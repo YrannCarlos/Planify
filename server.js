@@ -21,7 +21,7 @@ app.get("*", (_req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Planify rodando em http://localhost:${PORT}`);
+const PORT = 5000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Planify rodando em http://0.0.0.0:${PORT}`);
 });
